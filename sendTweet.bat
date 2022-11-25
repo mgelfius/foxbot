@@ -1,0 +1,1 @@
+twurl "/1.1/statuses/update.json" -d "media_ids=replaceWithMediaId&status=replaceWithStatus"
