@@ -132,7 +132,7 @@ def sendTweet(payload, mediaId):
     print(responseValue)
 
 def prepareTweet(link, modernOrClassic, randomOrToday):
-    payload = modernOrClassic + " Foxtrot for " + currentDate + ". " + link
+    payload = modernOrClassic + " Foxtrot for " + date.today().strftime("%d/%m/%Y") + ". " + link
     mediaId = str(uploadMedia(randomOrToday))
     index = mediaId.find('media_id_string')
     mediaIdFinal = mediaId[(index + 18):(index + 18 + 19)]
