@@ -2,7 +2,6 @@ from datetime import date, datetime, timedelta
 import random
 import requests
 from bs4 import BeautifulSoup
-from urllib.request import Request, urlopen
 import subprocess
 import fileinput, sys
 import re
@@ -19,8 +18,12 @@ def main():
     todaysUrl = ""
     randomUrl = ""
 
+    # If it's Sunday, get the new strip
+    # If there isn't a new strip, get a random modern strip
     if dayOfWeek == 6:
         todaysUrl = tryToDownloadGoComics(baseUrl + currentDate, "foxtrotToday")
+        if todaysUrl == "":
+            todaysUrl = tryToGetStrip("foxtrotToday", modernRunStart, date.today())
     else:
         todaysUrl = tryToGetStrip("foxtrotToday", modernRunStart, date.today())
 
@@ -29,6 +32,7 @@ def main():
     prepareTweet(randomUrl, "Classic", "foxtrotRandom")
     prepareTweet(todaysUrl, "Modern", "foxtrotToday")
 
+# If the strip doesn't exist for that day, regenerate date and try again
 def tryToGetStrip(randomOrToday, startDate, endDate):
     retryGeneration = ""
     while retryGeneration == "":
@@ -36,6 +40,8 @@ def tryToGetStrip(randomOrToday, startDate, endDate):
         retryGeneration = tryToDownloadGoComics(retryUrl, randomOrToday)
     return retryGeneration
 
+# Try to download the strip and return a link. 
+# If unsuccessful, return an empty string
 def tryToDownloadGoComics(randomUrl, randomOrToday):
     try:
         randomStripImgLink = getGoComicsStrip(randomUrl)
@@ -45,54 +51,24 @@ def tryToDownloadGoComics(randomUrl, randomOrToday):
         print(e)
         return ""
 
-def tryToDownload(randomUrl):
-    try:
-        randomLink = getStripLink(randomUrl)
-        randomStripImgLink = getStrip(randomLink)
-        downloadStrip(randomStripImgLink, "foxtrotRandom")
-        return randomLink
-    except Exception as e:
-        print(e)
-        return ""
-
+# Generate a random date within a range formatted for the GoComics url
 def generateRandomDate(runStart, runEnd):
     random.seed(a = None)
     totalDays = (runEnd - runStart).days
     randomDay = random.randrange(totalDays)
     return (runStart + timedelta(days=randomDay)).strftime("%Y/%m/%d")
 
-def generateRandomSunday(runStart, runEnd, currentDate):
-    randomDate = date(1970, 1, 1)
-    random.seed(a = None)
-    while randomDate.weekday() != 6 and randomDate.strftime("%Y/%m/%d") != currentDate:
-        totalDays = (runEnd - runStart).days
-        randomDay = random.randrange(totalDays)
-        randomDate = runStart + timedelta(days=randomDay)
-
-    return randomDate.strftime("%Y/%m/%d")
-
-def getStripLink(url):
-    req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    webpage = urlopen(req).read()
-    soup = BeautifulSoup(webpage, 'html.parser')
-    return soup.find("figure").a.get('href')
-
-def getStrip(url):
-    req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    webpage = urlopen(req).read()
-    soup = BeautifulSoup(webpage, 'html.parser')
-    return soup.find("figure").img.get("src")
-
+# Find the strip on the page, and return the image link
 def getGoComicsStrip(url):
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9"
         }
-    req = Request(url, headers=headers)
     webpage = requests.get(url, headers).content
     soup = BeautifulSoup(webpage, 'html.parser')
     return soup.find(class_="item-comic-image").img.get("src")
 
+# Download the image to ./FoxtrotImg as either foxtrotToday or foxtrotRandom
 def downloadStrip(link, stripName):
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -103,6 +79,9 @@ def downloadStrip(link, stripName):
     with open('./FoxtrotImg/' + stripName + '.png', 'wb') as handler:
         handler.write(r.content)
 
+# Uploads the image to twitter, returning the response.
+# Rewrites the batch file with the image name before execution
+# and writes it back before returning the output.
 def uploadMedia(randomOrToday):
     for line in fileinput.input([r".\uploadmedia.bat"], inplace=True):
         line = re.sub("replaceWithImageName", randomOrToday, line)
@@ -116,6 +95,9 @@ def uploadMedia(randomOrToday):
     
     return responseValue
 
+# Sends the tweet.
+# Rewrites the batch file with the media ID and 
+# tweet status before execution and writes it back.
 def sendTweet(payload, mediaId):
     for line in fileinput.input([r".\sendTweet.bat"], inplace=True):
         line = re.sub("replaceWithStatus", payload, line)
@@ -131,8 +113,10 @@ def sendTweet(payload, mediaId):
 
     print(responseValue)
 
+# Builds the tweet status, uploads the image, and finds the media ID
+# before sending the tweet.
 def prepareTweet(link, modernOrClassic, randomOrToday):
-    payload = modernOrClassic + " Foxtrot for " + date.today().strftime("%d/%m/%Y") + ". " + link
+    payload = modernOrClassic + " Foxtrot for " + date.today().strftime("%m/%d/%Y") + ". " + link
     mediaId = str(uploadMedia(randomOrToday))
     index = mediaId.find('media_id_string')
     mediaIdFinal = mediaId[(index + 18):(index + 18 + 19)]
